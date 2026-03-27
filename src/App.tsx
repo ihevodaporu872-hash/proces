@@ -3,6 +3,7 @@ import AppLayout from './components/layout/AppLayout'
 import RequestsPage from './pages/RequestsPage'
 import MontagePage from './pages/MontagePage'
 import HistoryPage from './pages/HistoryPage'
+import LeftoversPage from './pages/LeftoversPage'
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/montage" element={<MontagePage />} />
+          <Route path="/leftovers" element={<LeftoversPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="*" element={<Navigate to="/requests" replace />} />
         </Route>

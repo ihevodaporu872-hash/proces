@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { ClipboardList, Wrench, History } from 'lucide-react'
+import { ClipboardList, Wrench, PackageOpen, History } from 'lucide-react'
 
 const navItems = [
   { to: '/requests', label: 'Заявки', icon: ClipboardList },
   { to: '/montage', label: 'Монтаж', icon: Wrench },
+  { to: '/leftovers', label: 'Остатки', icon: PackageOpen },
   { to: '/history', label: 'История', icon: History },
 ]
 

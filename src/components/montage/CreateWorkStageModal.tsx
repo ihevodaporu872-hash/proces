@@ -7,6 +7,7 @@ import type { RequestItem } from '@/types'
 interface MaterialRow {
   request_item_id: string
   quantity_planned: string
+  source: 'request' | 'leftover'
 }
 
 interface Props {
@@ -18,8 +19,9 @@ interface Props {
 export default function CreateWorkStageModal({ open, onClose, onCreated }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [materials, setMaterials] = useState<MaterialRow[]>([{ request_item_id: '', quantity_planned: '' }])
+  const [materials, setMaterials] = useState<MaterialRow[]>([{ request_item_id: '', quantity_planned: '', source: 'request' }])
   const [availableItems, setAvailableItems] = useState<(RequestItem & { request_title: string })[]>([])
+  const [leftoverItems, setLeftoverItems] = useState<(RequestItem & { request_title: string })[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -33,16 +35,18 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
       .gt('quantity_available', 0)
 
     if (data) {
-      setAvailableItems(
-        data.map((it: any) => ({
-          ...it,
-          request_title: it.material_requests?.title || '',
-        }))
-      )
+      const mapped = data.map((it: any) => ({
+        ...it,
+        request_title: it.material_requests?.title || '',
+      }))
+      // Новые материалы: ещё не использовались
+      setAvailableItems(mapped.filter((it: any) => Number(it.quantity_used) === 0))
+      // Остатки: частично использованные, но ещё есть доступное кол-во
+      setLeftoverItems(mapped.filter((it: any) => Number(it.quantity_used) > 0))
     }
   }
 
-  const addMaterial = () => setMaterials([...materials, { request_item_id: '', quantity_planned: '' }])
+  const addMaterial = (source: 'request' | 'leftover') => setMaterials([...materials, { request_item_id: '', quantity_planned: '', source }])
   const removeMaterial = (i: number) => {
     if (materials.length > 1) setMaterials(materials.filter((_, idx) => idx !== i))
   }
@@ -90,7 +94,7 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
     setSaving(false)
     setTitle('')
     setDescription('')
-    setMaterials([{ request_item_id: '', quantity_planned: '' }])
+    setMaterials([{ request_item_id: '', quantity_planned: '', source: 'request' }])
     onCreated()
     onClose()
   }
@@ -124,7 +128,7 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
             <label className="text-sm font-medium text-gray-700">Материалы из заявок</label>
             <button
               type="button"
-              onClick={addMaterial}
+              onClick={() => addMaterial('request')}
               className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
             >
               <Plus size={14} /> Добавить
@@ -132,41 +136,99 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
           </div>
 
           <div className="space-y-2">
-            {materials.map((mat, i) => (
-              <div key={i} className="flex gap-2 items-start">
-                <select
-                  value={mat.request_item_id}
-                  onChange={(e) => updateMaterial(i, 'request_item_id', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="">Выберите материал...</option>
-                  {availableItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} ({item.request_title}) — доступно: {item.quantity_available} {item.unit}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  value={mat.quantity_planned}
-                  onChange={(e) => updateMaterial(i, 'quantity_planned', e.target.value)}
-                  placeholder="Кол-во"
-                  min="0"
-                  step="0.001"
-                  className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeMaterial(i)}
-                  className="p-2 text-gray-400 hover:text-red-500"
-                  disabled={materials.length <= 1}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
+            {materials.filter((m) => m.source === 'request').map((mat) => {
+              const idx = materials.indexOf(mat)
+              return (
+                <div key={idx} className="flex gap-2 items-start">
+                  <select
+                    value={mat.request_item_id}
+                    onChange={(e) => updateMaterial(idx, 'request_item_id', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Выберите материал...</option>
+                    {availableItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.request_title}) — доступно: {item.quantity_available} {item.unit}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    value={mat.quantity_planned}
+                    onChange={(e) => updateMaterial(idx, 'quantity_planned', e.target.value)}
+                    placeholder="Кол-во"
+                    min="0"
+                    step="0.001"
+                    className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeMaterial(idx)}
+                    className="p-2 text-gray-400 hover:text-red-500"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              )
+            })}
+            {materials.filter((m) => m.source === 'request').length === 0 && (
+              <p className="text-xs text-gray-400">Нет добавленных материалов</p>
+            )}
           </div>
         </div>
+
+        {leftoverItems.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700">Остатки от предыдущих работ</label>
+              <button
+                type="button"
+                onClick={() => addMaterial('leftover')}
+                className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+              >
+                <Plus size={14} /> Добавить остаток
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {materials.filter((m) => m.source === 'leftover').map((mat) => {
+                const idx = materials.indexOf(mat)
+                return (
+                  <div key={idx} className="flex gap-2 items-start">
+                    <select
+                      value={mat.request_item_id}
+                      onChange={(e) => updateMaterial(idx, 'request_item_id', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-emerald-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-emerald-50"
+                    >
+                      <option value="">Выберите остаток...</option>
+                      {leftoverItems.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} ({item.request_title}) — остаток: {item.quantity_available} {item.unit}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      value={mat.quantity_planned}
+                      onChange={(e) => updateMaterial(idx, 'quantity_planned', e.target.value)}
+                      placeholder="Кол-во"
+                      min="0"
+                      step="0.001"
+                      className="w-28 px-3 py-2 border border-emerald-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-emerald-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMaterial(idx)}
+                      className="p-2 text-gray-400 hover:text-red-500"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">
