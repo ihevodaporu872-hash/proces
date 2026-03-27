@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, ChevronRight, Play, CheckCircle } from 'lucide-react'
+import { Plus, Search, ChevronRight, ChevronDown, Play, CheckCircle, Archive } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import ProgressCell from '@/components/shared/ProgressCell'
 import CreateWorkStageModal from '@/components/montage/CreateWorkStageModal'
@@ -23,6 +23,7 @@ export default function MontagePage() {
   const [recordStage, setRecordStage] = useState<WorkStage | null>(null)
   const [completeStageModal, setCompleteStageModal] = useState<WorkStage | null>(null)
   const [detailStage, setDetailStage] = useState<WorkStage | null>(null)
+  const [showArchive, setShowArchive] = useState(false)
 
   useEffect(() => { loadStages() }, [])
 
@@ -53,7 +54,13 @@ export default function MontagePage() {
   }
 
 
-  const filtered = stages.filter((s) =>
+  const activeStages = stages.filter((s) => s.status !== 'completed')
+  const archivedStages = stages.filter((s) => s.status === 'completed')
+
+  const filtered = activeStages.filter((s) =>
+    s.title.toLowerCase().includes(search.toLowerCase())
+  )
+  const filteredArchive = archivedStages.filter((s) =>
     s.title.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -175,6 +182,47 @@ export default function MontagePage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Архив */}
+      {filteredArchive.length > 0 && (
+        <div className="mt-8">
+          <button
+            onClick={() => setShowArchive(!showArchive)}
+            className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 mb-3"
+          >
+            <Archive size={16} />
+            Архив ({filteredArchive.length})
+            <ChevronDown size={16} className={`transition-transform ${showArchive ? 'rotate-180' : ''}`} />
+          </button>
+          {showArchive && (
+            <div className="space-y-2">
+              {filteredArchive.map((stage) => (
+                <div
+                  key={stage.id}
+                  className="bg-gray-50 rounded-xl border border-gray-200 p-3 cursor-pointer hover:bg-gray-100 transition-colors opacity-75"
+                  onClick={() => setDetailStage(stage)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-medium text-gray-600">{stage.title}</h3>
+                      {(() => {
+                        const { totalPlanned, totalDelivered, totalUsed } = getStageProgress(stage)
+                        return <ProgressCell total={totalPlanned} delivered={totalDelivered} used={totalUsed} />
+                      })()}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      {stage.completed_at && (
+                        <span>Завершён: {new Date(stage.completed_at).toLocaleDateString('ru-RU')}</span>
+                      )}
+                      <ChevronRight size={16} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

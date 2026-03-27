@@ -215,12 +215,16 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated }
                       </td>
                       <td className="px-3 py-2 text-right font-medium">{item.quantity_available}</td>
                       <td className="px-3 py-2">
-                        <button
-                          onClick={() => setDeliveryItemId(item.id)}
-                          className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                        >
-                          <Truck size={14} /> Поставка
-                        </button>
+                        {Number(item.quantity_delivered) < Number(item.quantity_ordered) ? (
+                          <button
+                            onClick={() => setDeliveryItemId(item.id)}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                          >
+                            <Truck size={14} /> Поставка
+                          </button>
+                        ) : (
+                          <span className="text-xs text-green-600 font-medium">100%</span>
+                        )}
                       </td>
                     </tr>
                   ))}

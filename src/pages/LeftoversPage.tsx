@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import ProgressCell from '@/components/shared/ProgressCell'
 import type { RequestItem } from '@/types'
 
 interface LeftoverRow extends RequestItem {
@@ -73,7 +72,6 @@ export default function LeftoversPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Заявка</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Доступно</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Ед.</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Прогресс</th>
               </tr>
             </thead>
             <tbody>
@@ -85,13 +83,6 @@ export default function LeftoversPage() {
                     {item.quantity_available}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{item.unit}</td>
-                  <td className="px-4 py-3">
-                    <ProgressCell
-                      total={Number(item.quantity_ordered)}
-                      delivered={Number(item.quantity_delivered)}
-                      used={Number(item.quantity_used)}
-                    />
-                  </td>
                 </tr>
               ))}
             </tbody>

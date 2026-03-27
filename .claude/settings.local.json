@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/usr/claudeprojects/tickhonovich/quickshare//**)",
+      "Read(//c/Users/usr/claudeprojects/tickhonovich/quickshare/**)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(grep -E \"\\(package\\\\.json|tsconfig|\\\\.tsx?$\\)\")"
+    ]
+  }
+}
