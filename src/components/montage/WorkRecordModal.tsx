@@ -349,7 +349,7 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
           />
         </div>
 
-        <FileUpload files={files} onChange={setFiles} label="Прикрепить фото/документы" />
+        <FileUpload files={files} onChange={setFiles} imagesOnly />
 
         {/* Фиксация поставок */}
         {deliveryRows.length > 0 && (

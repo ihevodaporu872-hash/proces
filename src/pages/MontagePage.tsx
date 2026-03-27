@@ -244,6 +244,8 @@ export default function MontagePage() {
         open={!!detailStage}
         onClose={() => setDetailStage(null)}
         stage={detailStage}
+        onUpdated={() => { loadStages() }}
+        onDeleted={() => { setDetailStage(null); loadStages() }}
       />
     </div>
   )

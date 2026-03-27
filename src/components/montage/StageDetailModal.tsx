@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Package, ClipboardCheck, FileText } from 'lucide-react'
+import { Package, ClipboardCheck, FileText, Pencil, Trash2 } from 'lucide-react'
 import Modal from '../shared/Modal'
 import ProgressCell from '../shared/ProgressCell'
 import { supabase } from '@/lib/supabase'
@@ -10,12 +10,18 @@ interface Props {
   open: boolean
   onClose: () => void
   stage: WorkStage | null
+  onUpdated?: () => void
+  onDeleted?: () => void
 }
 
-export default function StageDetailModal({ open, onClose, stage }: Props) {
+export default function StageDetailModal({ open, onClose, stage, onUpdated, onDeleted }: Props) {
   const [materials, setMaterials] = useState<any[]>([])
   const [records, setRecords] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (stage && open) loadData()
@@ -42,20 +48,106 @@ export default function StageDetailModal({ open, onClose, stage }: Props) {
     setLoading(false)
   }
 
+  const handleStartEdit = () => {
+    if (!stage) return
+    setEditTitle(stage.title)
+    setEditDesc(stage.description || '')
+    setEditing(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!stage || !editTitle.trim()) return
+    setSaving(true)
+    await supabase.from('work_stages').update({
+      title: editTitle.trim(),
+      description: editDesc.trim() || null,
+    }).eq('id', stage.id)
+    setSaving(false)
+    setEditing(false)
+    onUpdated?.()
+  }
+
+  const handleDelete = async () => {
+    if (!stage) return
+    if (!confirm('Удалить этап и все связанные записи? Это действие необратимо.')) return
+    setSaving(true)
+    await supabase.from('work_stages').delete().eq('id', stage.id)
+    setSaving(false)
+    onClose()
+    onDeleted?.()
+  }
+
   if (!stage) return null
 
   return (
     <Modal open={open} onClose={onClose} title={stage.title} wide>
       <div className="space-y-5">
-        <div className="flex items-center gap-4">
-          {(() => {
-            const totalPlanned = materials.reduce((s: number, m: any) => s + Number(m.quantity_planned), 0)
-            const totalDelivered = materials.reduce((s: number, m: any) => s + Number(m.request_item?.quantity_delivered || 0), 0)
-            const totalUsed = materials.reduce((s: number, m: any) => s + Number(m.quantity_used), 0)
-            return <ProgressCell total={totalPlanned} delivered={totalDelivered} used={totalUsed} />
-          })()}
-          {stage.description && <span className="text-sm text-gray-500">{stage.description}</span>}
-        </div>
+        {editing ? (
+          <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Название</label>
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Описание</label>
+              <input
+                type="text"
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Описание этапа..."
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving || !editTitle.trim()}
+                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Сохранить
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {(() => {
+                const totalPlanned = materials.reduce((s: number, m: any) => s + Number(m.quantity_planned), 0)
+                const totalDelivered = materials.reduce((s: number, m: any) => s + Number(m.request_item?.quantity_delivered || 0), 0)
+                const totalUsed = materials.reduce((s: number, m: any) => s + Number(m.quantity_used), 0)
+                return <ProgressCell total={totalPlanned} delivered={totalDelivered} used={totalUsed} />
+              })()}
+              {stage.description && <span className="text-sm text-gray-500">{stage.description}</span>}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleStartEdit}
+                className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
+                title="Редактировать"
+              >
+                <Pencil size={16} />
+              </button>
+              <button
+                onClick={handleDelete}
+                className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                title="Удалить этап"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <p className="text-sm text-gray-500">Загрузка...</p>
@@ -142,18 +234,31 @@ export default function StageDetailModal({ open, onClose, stage }: Props) {
                       )}
 
                       {r.work_record_files?.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {r.work_record_files.map((f: any) => (
-                            <a
-                              key={f.id}
-                              href={getFileUrl(f.file_path)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded hover:bg-blue-100"
-                            >
-                              <FileText size={12} /> {f.file_name}
-                            </a>
-                          ))}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {r.work_record_files.map((f: any) => {
+                            const isImage = f.mime_type?.startsWith('image/')
+                            return isImage ? (
+                              <a
+                                key={f.id}
+                                href={getFileUrl(f.file_path)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block w-16 h-16 rounded-lg overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors"
+                              >
+                                <img src={getFileUrl(f.file_path)} alt={f.file_name} className="w-full h-full object-cover" />
+                              </a>
+                            ) : (
+                              <a
+                                key={f.id}
+                                href={getFileUrl(f.file_path)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded hover:bg-blue-100"
+                              >
+                                <FileText size={12} /> {f.file_name}
+                              </a>
+                            )
+                          })}
                         </div>
                       )}
                     </div>

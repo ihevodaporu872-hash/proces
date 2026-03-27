@@ -5,6 +5,7 @@ import type { RequestItem } from '@/types'
 
 interface LeftoverRow extends RequestItem {
   request_title: string
+  request_number: number
 }
 
 export default function LeftoversPage() {
@@ -18,7 +19,7 @@ export default function LeftoversPage() {
     setLoading(true)
     const { data } = await supabase
       .from('request_items')
-      .select('*, material_requests!inner(title)')
+      .select('*, material_requests!inner(title, number)')
       .gt('quantity_available', 0)
 
     if (data) {
@@ -26,6 +27,7 @@ export default function LeftoversPage() {
         data.map((it: any) => ({
           ...it,
           request_title: it.material_requests?.title || '',
+          request_number: it.material_requests?.number || 0,
         }))
       )
     }
@@ -69,6 +71,7 @@ export default function LeftoversPage() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Материал</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">№ заявки</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Заявка</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Доступно</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Ед.</th>
@@ -78,6 +81,7 @@ export default function LeftoversPage() {
               {filtered.map((item) => (
                 <tr key={item.id} className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
+                  <td className="px-4 py-3 text-gray-400">#{item.request_number}</td>
                   <td className="px-4 py-3 text-gray-500">{item.request_title}</td>
                   <td className="px-4 py-3 text-right font-semibold text-emerald-600">
                     {item.quantity_available}

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import Modal from '../shared/Modal'
+import FileUpload from '../shared/FileUpload'
 import { supabase } from '@/lib/supabase'
+import { uploadFile } from '@/lib/fileStorage'
 import type { RequestItem } from '@/types'
 
 interface MaterialRow {
@@ -22,6 +24,7 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
   const [materials, setMaterials] = useState<MaterialRow[]>([{ request_item_id: '', quantity_planned: '', source: 'request' }])
   const [availableItems, setAvailableItems] = useState<(RequestItem & { request_title: string })[]>([])
   const [leftoverItems, setLeftoverItems] = useState<(RequestItem & { request_title: string })[]>([])
+  const [photos, setPhotos] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -86,18 +89,34 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
       )
     }
 
-    await supabase.from('process_history').insert({
+    const { data: histEntry } = await supabase.from('process_history').insert({
       event_type: 'work_created',
       reference_id: stage.id,
       reference_table: 'work_stages',
       title: `Создан этап: ${title.trim()}`,
       description: validMaterials.length ? `${validMaterials.length} материалов привязано` : null,
-    })
+    }).select().single()
+
+    if (photos.length > 0 && histEntry) {
+      for (const file of photos) {
+        const { path, error: uploadErr } = await uploadFile(file, `work_stages/${stage.id}`)
+        if (!uploadErr && path) {
+          await supabase.from('process_history_files').insert({
+            history_id: histEntry.id,
+            file_name: file.name,
+            file_path: path,
+            file_size: file.size,
+            mime_type: file.type,
+          })
+        }
+      }
+    }
 
     setSaving(false)
     setTitle('')
     setDescription('')
     setMaterials([{ request_item_id: '', quantity_planned: '', source: 'request' }])
+    setPhotos([])
     onCreated()
     onClose()
   }
@@ -242,6 +261,8 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
             </div>
           </div>
         )}
+
+        <FileUpload files={photos} onChange={setPhotos} imagesOnly />
 
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">

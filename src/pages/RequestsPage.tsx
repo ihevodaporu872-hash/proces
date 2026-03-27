@@ -180,6 +180,7 @@ export default function RequestsPage() {
         onClose={() => setSelectedRequest(null)}
         request={selectedRequest}
         onUpdated={loadRequests}
+        onDeleted={() => { setSelectedRequest(null); loadRequests() }}
       />
     </div>
   )

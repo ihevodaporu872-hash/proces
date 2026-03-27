@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Package, Truck } from 'lucide-react'
+import { Package, Truck, Pencil, Trash2 } from 'lucide-react'
 import Modal from '../shared/Modal'
 import FileUpload from '../shared/FileUpload'
 import ProgressCell from '../shared/ProgressCell'
@@ -12,9 +12,10 @@ interface Props {
   onClose: () => void
   request: MaterialRequest | null
   onUpdated: () => void
+  onDeleted?: () => void
 }
 
-export default function RequestDetailModal({ open, onClose, request, onUpdated }: Props) {
+export default function RequestDetailModal({ open, onClose, request, onUpdated, onDeleted }: Props) {
   const [items, setItems] = useState<RequestItem[]>([])
   const [deliveries, setDeliveries] = useState<Record<string, Delivery[]>>({})
   const [deliveryItemId, setDeliveryItemId] = useState<string | null>(null)
@@ -23,6 +24,9 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated }
   const [deliveryFiles, setDeliveryFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDesc, setEditDesc] = useState('')
 
   useEffect(() => {
     if (request && open) loadData()
@@ -163,23 +167,109 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated }
     onUpdated()
   }
 
+  const handleStartEdit = () => {
+    if (!request) return
+    setEditTitle(request.title)
+    setEditDesc(request.description || '')
+    setEditing(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!request || !editTitle.trim()) return
+    setSaving(true)
+    await supabase.from('material_requests').update({
+      title: editTitle.trim(),
+      description: editDesc.trim() || null,
+    }).eq('id', request.id)
+    setSaving(false)
+    setEditing(false)
+    onUpdated()
+  }
+
+  const handleDelete = async () => {
+    if (!request) return
+    if (!confirm('Удалить заявку и все связанные данные? Это действие необратимо.')) return
+    setSaving(true)
+    await supabase.from('material_requests').delete().eq('id', request.id)
+    setSaving(false)
+    onClose()
+    onDeleted?.()
+  }
+
   if (!request) return null
 
   return (
     <Modal open={open} onClose={onClose} title={`Заявка: ${request.title}`} wide>
       <div className="space-y-5">
         {/* Шапка */}
-        <div className="flex items-center gap-4">
-          {(() => {
-            const totalOrdered = items.reduce((s, i) => s + Number(i.quantity_ordered), 0)
-            const totalDelivered = items.reduce((s, i) => s + Number(i.quantity_delivered), 0)
-            const totalUsed = items.reduce((s, i) => s + Number(i.quantity_used), 0)
-            return <ProgressCell total={totalOrdered} delivered={totalDelivered} used={totalUsed} />
-          })()}
-          {request.description && (
-            <span className="text-sm text-gray-500">{request.description}</span>
-          )}
-        </div>
+        {editing ? (
+          <div className="space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Название</label>
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Описание</label>
+              <input
+                type="text"
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Описание заявки..."
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving || !editTitle.trim()}
+                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Сохранить
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {(() => {
+                const totalOrdered = items.reduce((s, i) => s + Number(i.quantity_ordered), 0)
+                const totalDelivered = items.reduce((s, i) => s + Number(i.quantity_delivered), 0)
+                const totalUsed = items.reduce((s, i) => s + Number(i.quantity_used), 0)
+                return <ProgressCell total={totalOrdered} delivered={totalDelivered} used={totalUsed} />
+              })()}
+              {request.description && (
+                <span className="text-sm text-gray-500">{request.description}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleStartEdit}
+                className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
+                title="Редактировать"
+              >
+                <Pencil size={16} />
+              </button>
+              <button
+                onClick={handleDelete}
+                className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                title="Удалить заявку"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Позиции */}
         {loading ? (
