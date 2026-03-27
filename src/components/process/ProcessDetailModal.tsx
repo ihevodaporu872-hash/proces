@@ -74,13 +74,62 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
       recordHistory = data || []
     }
 
-    const allHistory = [...(histRes.data || []), ...recordHistory]
+    const allProcessHistory = [...(histRes.data || []), ...recordHistory]
+
+    // Объединяем process_history + work_records в единый таймлайн
+    const timelineFromHistory = allProcessHistory.map((h: any) => ({
+      id: h.id,
+      title: h.title,
+      description: h.description,
+      created_at: h.created_at,
+      files: (h.process_history_files || []) as any[],
+      consumptions: [] as any[],
+      leftovers: [] as any[],
+    }))
+
+    // work_records, у которых нет соответствующей записи в process_history
+    const historyRecordIds = new Set(allProcessHistory
+      .filter((h: any) => h.reference_table === 'work_records')
+      .map((h: any) => h.reference_id))
+
+    const timelineFromRecords = records
+      .filter((r: any) => !historyRecordIds.has(r.id))
+      .map((r: any) => ({
+        id: `wr-${r.id}`,
+        title: `Фиксация работ`,
+        description: r.description,
+        created_at: r.recorded_at,
+        files: (r.work_record_files || []) as any[],
+        consumptions: (r.material_consumptions || []) as any[],
+        leftovers: (r.leftovers || []) as any[],
+      }))
+
+    // Для записей process_history, привязанных к work_records — добавляем файлы из work_records
+    for (const entry of timelineFromHistory) {
+      const ph = allProcessHistory.find((h: any) => h.id === entry.id)
+      if (ph?.reference_table === 'work_records') {
+        const wr = records.find((r: any) => r.id === ph.reference_id)
+        if (wr) {
+          // Добавляем work_record_files, которых нет в process_history_files
+          const existingPaths = new Set(entry.files.map((f: any) => f.file_path))
+          for (const f of wr.work_record_files || []) {
+            if (!existingPaths.has(f.file_path)) {
+              entry.files.push(f)
+            }
+          }
+          entry.consumptions = wr.material_consumptions || []
+          entry.leftovers = wr.leftovers || []
+        }
+      }
+    }
+
+    const timeline = [...timelineFromHistory, ...timelineFromRecords]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     setMaterials(matsRes.data || [])
-    setHistory(allHistory)
+    setHistory(timeline)
 
-    // Собираем все файлы из записей о работах + истории
+    // Собираем все файлы для галереи
     const files: FileInfo[] = []
     for (const r of records) {
       const consumptionText = (r.material_consumptions || [])
@@ -99,7 +148,7 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
         })
       }
     }
-    for (const h of allHistory) {
+    for (const h of allProcessHistory) {
       for (const f of h.process_history_files || []) {
         if (!files.find((ef) => ef.file_path === f.file_path)) {
           files.push({
@@ -178,9 +227,42 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
                   </div>
                   <span className="text-xs text-gray-400 shrink-0">{formatDateTime(entry.created_at)}</span>
                 </div>
-                {entry.process_history_files?.length > 0 && (
+
+                {/* Использованные материалы */}
+                {entry.consumptions?.length > 0 && (
+                  <div className="mt-2 text-xs text-gray-600">
+                    <span className="font-medium">Использовано: </span>
+                    {entry.consumptions
+                      .filter((mc: any) => mc.quantity > 0)
+                      .map((mc: any, i: number, arr: any[]) => (
+                        <span key={mc.id}>
+                          {mc.request_item?.name}: {mc.quantity} {mc.request_item?.unit}
+                          {i < arr.length - 1 ? ', ' : ''}
+                        </span>
+                      ))}
+                  </div>
+                )}
+
+                {/* Остатки */}
+                {entry.leftovers?.length > 0 && entry.leftovers.some((l: any) => l.quantity > 0) && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {entry.leftovers.filter((l: any) => l.quantity > 0).map((l: any) => (
+                      <span
+                        key={l.id}
+                        className={`text-xs px-1.5 py-0.5 rounded ${
+                          l.leftover_type === 'usable' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                        }`}
+                      >
+                        {l.leftover_type === 'usable' ? 'Пригодные' : 'Утиль'}: {l.quantity}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Файлы */}
+                {entry.files?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {entry.process_history_files.map((f: any) => {
+                    {entry.files.map((f: any) => {
                       const isImage = f.mime_type?.startsWith('image/')
                       return isImage ? (
                         <div
