@@ -28,22 +28,22 @@ export default function ProgressCell({ total, delivered, used }: ProgressCellPro
             />
           )}
           <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
-            {used} / {delivered} / {total}
+            {total} / {delivered} / {used}
           </span>
         </div>
       </div>
       <div className="flex gap-3 mt-1 text-[10px] text-gray-500">
         <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-sm bg-emerald-500" />
-          исп.
+          <span className="inline-block w-2 h-2 rounded-sm bg-gray-200" />
+          всего
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-2 h-2 rounded-sm bg-blue-400" />
-          пост.
+          поступило
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-sm bg-gray-200" />
-          остаток
+          <span className="inline-block w-2 h-2 rounded-sm bg-emerald-500" />
+          использовано
         </span>
       </div>
     </div>
