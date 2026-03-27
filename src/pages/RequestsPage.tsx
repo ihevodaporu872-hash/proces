@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, ChevronRight } from 'lucide-react'
+import { Plus, Search, ChevronRight, ChevronDown, Archive } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import ProgressCell from '@/components/shared/ProgressCell'
 import CreateRequestModal from '@/components/requests/CreateRequestModal'
@@ -14,12 +14,19 @@ function getRequestProgress(req: MaterialRequest) {
   return { totalOrdered, totalDelivered, totalUsed }
 }
 
+function isFullyUsed(req: MaterialRequest): boolean {
+  const items = req.request_items || []
+  if (items.length === 0) return false
+  return items.every((i) => Number(i.quantity_available) <= 0 && Number(i.quantity_used) > 0)
+}
+
 export default function RequestsPage() {
   const [requests, setRequests] = useState<MaterialRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [selectedRequest, setSelectedRequest] = useState<MaterialRequest | null>(null)
+  const [showArchive, setShowArchive] = useState(false)
 
   useEffect(() => { loadRequests() }, [])
 
@@ -33,7 +40,13 @@ export default function RequestsPage() {
     setLoading(false)
   }
 
-  const filtered = requests.filter((r) =>
+  const activeRequests = requests.filter((r) => !isFullyUsed(r))
+  const archivedRequests = requests.filter((r) => isFullyUsed(r))
+
+  const filtered = activeRequests.filter((r) =>
+    r.title.toLowerCase().includes(search.toLowerCase())
+  )
+  const filteredArchive = archivedRequests.filter((r) =>
     r.title.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -114,6 +127,50 @@ export default function RequestsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Архив */}
+      {filteredArchive.length > 0 && (
+        <div className="mt-8">
+          <button
+            onClick={() => setShowArchive(!showArchive)}
+            className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 mb-3"
+          >
+            <Archive size={16} />
+            Архив ({filteredArchive.length})
+            <ChevronDown size={16} className={`transition-transform ${showArchive ? 'rotate-180' : ''}`} />
+          </button>
+          {showArchive && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden opacity-75">
+              <table className="w-full text-sm">
+                <tbody>
+                  {filteredArchive.map((req) => (
+                    <tr
+                      key={req.id}
+                      className="border-t border-gray-100 first:border-t-0 hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => setSelectedRequest(req)}
+                    >
+                      <td className="px-4 py-3 text-gray-400">#{req.number}</td>
+                      <td className="px-4 py-3 font-medium text-gray-600">{req.title}</td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const { totalOrdered, totalDelivered, totalUsed } = getRequestProgress(req)
+                          return <ProgressCell total={totalOrdered} delivered={totalDelivered} used={totalUsed} />
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 text-gray-400">
+                        {new Date(req.created_at).toLocaleDateString('ru-RU')}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ChevronRight size={16} className="text-gray-400" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
