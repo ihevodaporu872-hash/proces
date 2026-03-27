@@ -105,7 +105,6 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated }
     }
 
     // Обновить количество поставки в позиции
-    const item = items.find((it) => it.id === deliveryItemId)
     if (item) {
       const newDelivered = item.quantity_delivered + qty
       const newAvailable = item.quantity_available + qty
@@ -235,64 +234,60 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated }
         )}
 
         {/* Форма фиксации поставки */}
-        {deliveryItemId && (
-          <div className="p-4 bg-blue-50 rounded-lg space-y-3 border border-blue-200">
-            {(() => {
-              const selItem = items.find((it) => it.id === deliveryItemId)
-              const maxQty = selItem ? Number(selItem.quantity_ordered) - Number(selItem.quantity_delivered) : 0
-              return (
-                <>
-                  <h4 className="text-sm font-semibold text-blue-800">
-                    Зафиксировать поставку: {selItem?.name}
-                    <span className="text-xs font-normal text-blue-600 ml-2">
-                      (макс. {maxQty} {selItem?.unit})
-                    </span>
-                  </h4>
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <label className="block text-xs text-gray-600 mb-1">Количество</label>
-                      <input
-                        type="number"
-                        value={deliveryQty}
-                        onChange={(e) => setDeliveryQty(e.target.value)}
-                        min="0"
-                        max={maxQty}
-                        step="0.001"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
+        {deliveryItemId && (() => {
+          const selItem = items.find((it) => it.id === deliveryItemId)
+          const maxQty = selItem ? Number(selItem.quantity_ordered) - Number(selItem.quantity_delivered) : 0
+          return (
+            <div className="p-4 bg-blue-50 rounded-lg space-y-3 border border-blue-200">
+              <h4 className="text-sm font-semibold text-blue-800">
+                Зафиксировать поставку: {selItem?.name}
+                <span className="text-xs font-normal text-blue-600 ml-2">
+                  (макс. {maxQty} {selItem?.unit})
+                </span>
+              </h4>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-600 mb-1">Количество</label>
+                  <input
+                    type="number"
+                    value={deliveryQty}
+                    onChange={(e) => setDeliveryQty(e.target.value)}
+                    min="0"
+                    max={maxQty}
+                    step="0.001"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div className="flex-[2]">
+                  <label className="block text-xs text-gray-600 mb-1">Описание</label>
+                  <input
+                    type="text"
+                    value={deliveryDesc}
+                    onChange={(e) => setDeliveryDesc(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="Номер ТТН, комментарий..."
+                  />
+                </div>
               </div>
-              <div className="flex-[2]">
-                <label className="block text-xs text-gray-600 mb-1">Описание</label>
-                <input
-                  type="text"
-                  value={deliveryDesc}
-                  onChange={(e) => setDeliveryDesc(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  placeholder="Номер ТТН, комментарий..."
-                />
+              <FileUpload files={deliveryFiles} onChange={setDeliveryFiles} label="Подтверждающие документы" />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleRecordDelivery}
+                  disabled={saving || !deliveryQty}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {saving ? 'Сохранение...' : 'Зафиксировать'}
+                </button>
+                <button
+                  onClick={() => { setDeliveryItemId(null); setDeliveryFiles([]) }}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  Отмена
+                </button>
               </div>
             </div>
-            <FileUpload files={deliveryFiles} onChange={setDeliveryFiles} label="Подтверждающие документы" />
-            <div className="flex gap-2">
-              <button
-                onClick={handleRecordDelivery}
-                disabled={saving || !deliveryQty}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? 'Сохранение...' : 'Зафиксировать'}
-              </button>
-              <button
-                onClick={() => { setDeliveryItemId(null); setDeliveryFiles([]) }}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-              >
-                Отмена
-              </button>
-            </div>
-                </>
-              )
-            })()}
-          </div>
-        )}
+          )
+        })()}
 
         {/* История поставок */}
         {items.some((it) => deliveries[it.id]?.length) && (
