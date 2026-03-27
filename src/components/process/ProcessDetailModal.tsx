@@ -43,71 +43,35 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
         .order('created_at', { ascending: false }),
     ])
 
-    // Также загрузим историю по work_records этого этапа
     const records = recsRes.data || []
-    const recordIds = records.map((r: any) => r.id)
+    const recordIds = new Set(records.map((r: any) => r.id))
 
-    let recordHistory: any[] = []
-    if (recordIds.length > 0) {
-      const { data } = await supabase
-        .from('process_history')
-        .select('*, process_history_files(*)')
-        .eq('reference_table', 'work_records')
-        .in('reference_id', recordIds)
-        .order('created_at', { ascending: false })
-      recordHistory = data || []
-    }
-
-    const allProcessHistory = [...(histRes.data || []), ...recordHistory]
-
-    // Объединяем process_history + work_records в единый таймлайн
-    const timelineFromHistory = allProcessHistory.map((h: any) => ({
-      id: h.id,
-      title: h.title,
-      description: h.description,
-      created_at: h.created_at,
-      files: (h.process_history_files || []) as any[],
-      consumptions: [] as any[],
-      leftovers: [] as any[],
+    // Таймлайн из work_records — основной источник с файлами
+    const timelineFromRecords = records.map((r: any) => ({
+      id: `wr-${r.id}`,
+      title: 'Фиксация работ',
+      description: r.description,
+      created_at: r.recorded_at,
+      files: (r.work_record_files || []) as any[],
+      consumptions: (r.material_consumptions || []) as any[],
+      leftovers: (r.leftovers || []) as any[],
     }))
 
-    // work_records, у которых нет соответствующей записи в process_history
-    const historyRecordIds = new Set(allProcessHistory
-      .filter((h: any) => h.reference_table === 'work_records')
-      .map((h: any) => h.reference_id))
-
-    const timelineFromRecords = records
-      .filter((r: any) => !historyRecordIds.has(r.id))
-      .map((r: any) => ({
-        id: `wr-${r.id}`,
-        title: `Фиксация работ`,
-        description: r.description,
-        created_at: r.recorded_at,
-        files: (r.work_record_files || []) as any[],
-        consumptions: (r.material_consumptions || []) as any[],
-        leftovers: (r.leftovers || []) as any[],
+    // Таймлайн из process_history — события этапа (создание, старт, завершение)
+    // Не включаем записи work_recorded — они уже есть из work_records
+    const stageHistory = (histRes.data || [])
+      .filter((h: any) => h.event_type !== 'work_recorded')
+      .map((h: any) => ({
+        id: h.id,
+        title: h.title,
+        description: h.description,
+        created_at: h.created_at,
+        files: (h.process_history_files || []) as any[],
+        consumptions: [] as any[],
+        leftovers: [] as any[],
       }))
 
-    // Для записей process_history, привязанных к work_records — добавляем файлы из work_records
-    for (const entry of timelineFromHistory) {
-      const ph = allProcessHistory.find((h: any) => h.id === entry.id)
-      if (ph?.reference_table === 'work_records') {
-        const wr = records.find((r: any) => r.id === ph.reference_id)
-        if (wr) {
-          // Добавляем work_record_files, которых нет в process_history_files
-          const existingPaths = new Set(entry.files.map((f: any) => f.file_path))
-          for (const f of wr.work_record_files || []) {
-            if (!existingPaths.has(f.file_path)) {
-              entry.files.push(f)
-            }
-          }
-          entry.consumptions = wr.material_consumptions || []
-          entry.leftovers = wr.leftovers || []
-        }
-      }
-    }
-
-    const timeline = [...timelineFromHistory, ...timelineFromRecords]
+    const timeline = [...timelineFromRecords, ...stageHistory]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     setMaterials(matsRes.data || [])
@@ -187,18 +151,21 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
                   </div>
                 )}
 
-                {/* Файлы */}
+                {/* Фото и файлы */}
                 {entry.files?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {entry.files.map((f: any) => {
                       const isImage = f.mime_type?.startsWith('image/')
                       return isImage ? (
-                        <div
+                        <a
                           key={f.id}
-                          className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 transition-colors"
+                          href={getFileUrl(f.file_path)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-16 h-16 rounded-lg overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors"
                         >
                           <img src={getFileUrl(f.file_path)} alt={f.file_name} className="w-full h-full object-cover" />
-                        </div>
+                        </a>
                       ) : (
                         <a
                           key={f.id}
