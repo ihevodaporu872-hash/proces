@@ -11,7 +11,8 @@ function getStageProgress(stage: WorkStage) {
   const mats = stage.work_stage_materials || []
   const totalPlanned = mats.reduce((s, m) => s + Number(m.quantity_planned), 0)
   const totalUsed = mats.reduce((s, m) => s + Number(m.quantity_used), 0)
-  return { totalPlanned, totalUsed }
+  const totalDelivered = mats.reduce((s, m) => s + Number((m.request_item as any)?.quantity_delivered || 0), 0)
+  return { totalPlanned, totalDelivered, totalUsed }
 }
 
 export default function MontagePage() {
@@ -125,8 +126,8 @@ export default function MontagePage() {
                   <div className="flex items-center gap-3 mb-1">
                     <h3 className="font-medium text-gray-900">{stage.title}</h3>
                     {(() => {
-                      const { totalPlanned, totalUsed } = getStageProgress(stage)
-                      return <ProgressCell current={totalUsed} total={totalPlanned} label="Материалы" />
+                      const { totalPlanned, totalDelivered, totalUsed } = getStageProgress(stage)
+                      return <ProgressCell total={totalPlanned} delivered={totalDelivered} used={totalUsed} />
                     })()}
                   </div>
                   {stage.description && (

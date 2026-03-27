@@ -50,8 +50,9 @@ export default function StageDetailModal({ open, onClose, stage }: Props) {
         <div className="flex items-center gap-4">
           {(() => {
             const totalPlanned = materials.reduce((s: number, m: any) => s + Number(m.quantity_planned), 0)
+            const totalDelivered = materials.reduce((s: number, m: any) => s + Number(m.request_item?.quantity_delivered || 0), 0)
             const totalUsed = materials.reduce((s: number, m: any) => s + Number(m.quantity_used), 0)
-            return <ProgressCell current={totalUsed} total={totalPlanned} label="Материалы" />
+            return <ProgressCell total={totalPlanned} delivered={totalDelivered} used={totalUsed} />
           })()}
           {stage.description && <span className="text-sm text-gray-500">{stage.description}</span>}
         </div>

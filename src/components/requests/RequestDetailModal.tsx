@@ -166,12 +166,7 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated }
             const totalOrdered = items.reduce((s, i) => s + Number(i.quantity_ordered), 0)
             const totalDelivered = items.reduce((s, i) => s + Number(i.quantity_delivered), 0)
             const totalUsed = items.reduce((s, i) => s + Number(i.quantity_used), 0)
-            return (
-              <>
-                <ProgressCell current={totalDelivered} total={totalOrdered} label="Поставка" />
-                <ProgressCell current={totalUsed} total={totalOrdered} label="Использование" />
-              </>
-            )
+            return <ProgressCell total={totalOrdered} delivered={totalDelivered} used={totalUsed} />
           })()}
           {request.description && (
             <span className="text-sm text-gray-500">{request.description}</span>

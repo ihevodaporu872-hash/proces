@@ -192,8 +192,7 @@ export default function HistoryPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Дата</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Событие</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Название</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Всего / Поставлено</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Всего / Использовано</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Прогресс</th>
               </tr>
             </thead>
             <tbody>
@@ -212,18 +211,7 @@ export default function HistoryPage() {
                     {entry.title}
                   </td>
                   <td className="px-4 py-3">
-                    {totalOrdered > 0 ? (
-                      <ProgressCell current={totalDelivered} total={totalOrdered} label="Поставлено" />
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {totalOrdered > 0 ? (
-                      <ProgressCell current={totalUsed} total={totalOrdered} label="Использовано" />
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
+                    <ProgressCell total={totalOrdered} delivered={totalDelivered} used={totalUsed} />
                   </td>
                 </tr>
               ))}

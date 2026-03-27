@@ -84,8 +84,7 @@ export default function RequestsPage() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">№</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Название</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Поставка</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Использование</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Прогресс</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Дата</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -101,14 +100,8 @@ export default function RequestsPage() {
                   <td className="px-4 py-3 font-medium text-gray-900">{req.title}</td>
                   <td className="px-4 py-3">
                     {(() => {
-                      const { totalOrdered, totalDelivered } = getRequestProgress(req)
-                      return <ProgressCell current={totalDelivered} total={totalOrdered} />
-                    })()}
-                  </td>
-                  <td className="px-4 py-3">
-                    {(() => {
-                      const { totalOrdered, totalUsed } = getRequestProgress(req)
-                      return <ProgressCell current={totalUsed} total={totalOrdered} />
+                      const { totalOrdered, totalDelivered, totalUsed } = getRequestProgress(req)
+                      return <ProgressCell total={totalOrdered} delivered={totalDelivered} used={totalUsed} />
                     })()}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
