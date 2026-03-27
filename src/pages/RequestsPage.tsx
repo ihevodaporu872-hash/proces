@@ -1,30 +1,17 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, ChevronRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import StatusBadge from '@/components/shared/StatusBadge'
+import ProgressCell from '@/components/shared/ProgressCell'
 import CreateRequestModal from '@/components/requests/CreateRequestModal'
 import RequestDetailModal from '@/components/requests/RequestDetailModal'
 import type { MaterialRequest } from '@/types'
 
-const statusLabels: Record<string, string> = {
-  created: 'Создана',
-  awaiting_delivery: 'Ожидание поставки',
-  partial_delivery: 'Частично поставлено',
-  available: 'Материал доступен',
-  in_progress: 'В монтаже',
-  partial_done: 'Частично выполнено',
-  needs_reorder: 'Требуется допоставка',
-  completed: 'Завершено',
-}
-const statusColors: Record<string, string> = {
-  created: 'bg-gray-100 text-gray-700',
-  awaiting_delivery: 'bg-yellow-100 text-yellow-800',
-  partial_delivery: 'bg-orange-100 text-orange-800',
-  available: 'bg-green-100 text-green-800',
-  in_progress: 'bg-blue-100 text-blue-800',
-  partial_done: 'bg-indigo-100 text-indigo-800',
-  needs_reorder: 'bg-red-100 text-red-800',
-  completed: 'bg-emerald-100 text-emerald-800',
+function getRequestProgress(req: MaterialRequest) {
+  const items = req.request_items || []
+  const totalOrdered = items.reduce((s, i) => s + Number(i.quantity_ordered), 0)
+  const totalDelivered = items.reduce((s, i) => s + Number(i.quantity_delivered), 0)
+  const totalUsed = items.reduce((s, i) => s + Number(i.quantity_used), 0)
+  return { totalOrdered, totalDelivered, totalUsed }
 }
 
 export default function RequestsPage() {
@@ -97,8 +84,8 @@ export default function RequestsPage() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">№</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Название</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Статус</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600">Позиций</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Поставка</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Использование</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Дата</th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -113,13 +100,16 @@ export default function RequestsPage() {
                   <td className="px-4 py-3 text-gray-400">#{req.number}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{req.title}</td>
                   <td className="px-4 py-3">
-                    <StatusBadge
-                      label={statusLabels[req.status] || req.status}
-                      colorClass={statusColors[req.status] || 'bg-gray-100 text-gray-700'}
-                    />
+                    {(() => {
+                      const { totalOrdered, totalDelivered } = getRequestProgress(req)
+                      return <ProgressCell current={totalDelivered} total={totalOrdered} />
+                    })()}
                   </td>
-                  <td className="px-4 py-3 text-center text-gray-600">
-                    {req.request_items?.length || 0}
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const { totalOrdered, totalUsed } = getRequestProgress(req)
+                      return <ProgressCell current={totalUsed} total={totalOrdered} />
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {new Date(req.created_at).toLocaleDateString('ru-RU')}

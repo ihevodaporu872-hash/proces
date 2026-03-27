@@ -1,21 +1,17 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, ChevronRight, Play, CheckCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import StatusBadge from '@/components/shared/StatusBadge'
+import ProgressCell from '@/components/shared/ProgressCell'
 import CreateWorkStageModal from '@/components/montage/CreateWorkStageModal'
 import WorkRecordModal from '@/components/montage/WorkRecordModal'
 import StageDetailModal from '@/components/montage/StageDetailModal'
 import type { WorkStage } from '@/types'
 
-const statusLabels: Record<string, string> = {
-  planned: 'Запланирован',
-  in_progress: 'В работе',
-  completed: 'Завершён',
-}
-const statusColors: Record<string, string> = {
-  planned: 'bg-gray-100 text-gray-700',
-  in_progress: 'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
+function getStageProgress(stage: WorkStage) {
+  const mats = stage.work_stage_materials || []
+  const totalPlanned = mats.reduce((s, m) => s + Number(m.quantity_planned), 0)
+  const totalUsed = mats.reduce((s, m) => s + Number(m.quantity_used), 0)
+  return { totalPlanned, totalUsed }
 }
 
 export default function MontagePage() {
@@ -128,10 +124,10 @@ export default function MontagePage() {
                 >
                   <div className="flex items-center gap-3 mb-1">
                     <h3 className="font-medium text-gray-900">{stage.title}</h3>
-                    <StatusBadge
-                      label={statusLabels[stage.status] || stage.status}
-                      colorClass={statusColors[stage.status] || 'bg-gray-100 text-gray-700'}
-                    />
+                    {(() => {
+                      const { totalPlanned, totalUsed } = getStageProgress(stage)
+                      return <ProgressCell current={totalUsed} total={totalPlanned} label="Материалы" />
+                    })()}
                   </div>
                   {stage.description && (
                     <p className="text-sm text-gray-500">{stage.description}</p>

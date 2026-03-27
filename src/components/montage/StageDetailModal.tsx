@@ -1,21 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Package, ClipboardCheck, FileText } from 'lucide-react'
 import Modal from '../shared/Modal'
-import StatusBadge from '../shared/StatusBadge'
+import ProgressCell from '../shared/ProgressCell'
 import { supabase } from '@/lib/supabase'
 import { getFileUrl } from '@/lib/fileStorage'
 import type { WorkStage, WorkStageMaterial, WorkRecord } from '@/types'
-
-const statusLabels: Record<string, string> = {
-  planned: 'Запланирован',
-  in_progress: 'В работе',
-  completed: 'Завершён',
-}
-const statusColors: Record<string, string> = {
-  planned: 'bg-gray-100 text-gray-700',
-  in_progress: 'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
-}
 
 interface Props {
   open: boolean
@@ -58,11 +47,12 @@ export default function StageDetailModal({ open, onClose, stage }: Props) {
   return (
     <Modal open={open} onClose={onClose} title={stage.title} wide>
       <div className="space-y-5">
-        <div className="flex items-center gap-3">
-          <StatusBadge
-            label={statusLabels[stage.status] || stage.status}
-            colorClass={statusColors[stage.status] || 'bg-gray-100 text-gray-700'}
-          />
+        <div className="flex items-center gap-4">
+          {(() => {
+            const totalPlanned = materials.reduce((s: number, m: any) => s + Number(m.quantity_planned), 0)
+            const totalUsed = materials.reduce((s: number, m: any) => s + Number(m.quantity_used), 0)
+            return <ProgressCell current={totalUsed} total={totalPlanned} label="Материалы" />
+          })()}
           {stage.description && <span className="text-sm text-gray-500">{stage.description}</span>}
         </div>
 

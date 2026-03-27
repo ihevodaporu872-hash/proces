@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react'
 import { Package, Truck } from 'lucide-react'
 import Modal from '../shared/Modal'
 import FileUpload from '../shared/FileUpload'
-import StatusBadge from '../shared/StatusBadge'
+import ProgressCell from '../shared/ProgressCell'
 import { supabase } from '@/lib/supabase'
 import { uploadFile } from '@/lib/fileStorage'
-import type { MaterialRequest, RequestItem, Delivery, STATUS_LABELS, STATUS_COLORS } from '@/types'
+import type { MaterialRequest, RequestItem, Delivery } from '@/types'
 
 interface Props {
   open: boolean
@@ -23,27 +23,6 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated }
   const [deliveryFiles, setDeliveryFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
-
-  const statusLabels: Record<string, string> = {
-    created: 'Создана',
-    awaiting_delivery: 'Ожидание поставки',
-    partial_delivery: 'Частично поставлено',
-    available: 'Материал доступен',
-    in_progress: 'В монтаже',
-    partial_done: 'Частично выполнено',
-    needs_reorder: 'Требуется допоставка',
-    completed: 'Завершено',
-  }
-  const statusColors: Record<string, string> = {
-    created: 'bg-gray-100 text-gray-700',
-    awaiting_delivery: 'bg-yellow-100 text-yellow-800',
-    partial_delivery: 'bg-orange-100 text-orange-800',
-    available: 'bg-green-100 text-green-800',
-    in_progress: 'bg-blue-100 text-blue-800',
-    partial_done: 'bg-indigo-100 text-indigo-800',
-    needs_reorder: 'bg-red-100 text-red-800',
-    completed: 'bg-emerald-100 text-emerald-800',
-  }
 
   useEffect(() => {
     if (request && open) loadData()
@@ -182,11 +161,18 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated }
     <Modal open={open} onClose={onClose} title={`Заявка: ${request.title}`} wide>
       <div className="space-y-5">
         {/* Шапка */}
-        <div className="flex items-center gap-3">
-          <StatusBadge
-            label={statusLabels[request.status] || request.status}
-            colorClass={statusColors[request.status] || 'bg-gray-100 text-gray-700'}
-          />
+        <div className="flex items-center gap-4">
+          {(() => {
+            const totalOrdered = items.reduce((s, i) => s + Number(i.quantity_ordered), 0)
+            const totalDelivered = items.reduce((s, i) => s + Number(i.quantity_delivered), 0)
+            const totalUsed = items.reduce((s, i) => s + Number(i.quantity_used), 0)
+            return (
+              <>
+                <ProgressCell current={totalDelivered} total={totalOrdered} label="Поставка" />
+                <ProgressCell current={totalUsed} total={totalOrdered} label="Использование" />
+              </>
+            )
+          })()}
           {request.description && (
             <span className="text-sm text-gray-500">{request.description}</span>
           )}
