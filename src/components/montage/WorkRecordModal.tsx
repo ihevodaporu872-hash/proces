@@ -6,6 +6,15 @@ import { supabase } from '@/lib/supabase'
 import { uploadFile } from '@/lib/fileStorage'
 import type { WorkStage, WorkStageMaterial } from '@/types'
 
+interface DeliveryRow {
+  request_item_id: string
+  name: string
+  unit: string
+  ordered: number
+  delivered: number
+  quantity: string
+}
+
 interface ConsumptionRow {
   request_item_id: string
   name: string
@@ -34,6 +43,7 @@ interface Props {
 export default function WorkRecordModal({ open, onClose, stage, onRecorded, completeAfterSave }: Props) {
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<File[]>([])
+  const [deliveryRows, setDeliveryRows] = useState<DeliveryRow[]>([])
   const [consumptions, setConsumptions] = useState<ConsumptionRow[]>([])
   const [leftovers, setLeftovers] = useState<LeftoverRow[]>([])
   const [saving, setSaving] = useState(false)
@@ -51,6 +61,19 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
       .eq('work_stage_id', stage.id)
 
     if (data) {
+      // Поставки: показываем только материалы, по которым ещё не всё поставлено
+      setDeliveryRows(
+        data
+          .filter((m: any) => Number(m.request_item?.quantity_delivered || 0) < Number(m.request_item?.quantity_ordered || 0))
+          .map((m: any) => ({
+            request_item_id: m.request_item_id,
+            name: m.request_item?.name || '',
+            unit: m.request_item?.unit || '',
+            ordered: Number(m.request_item?.quantity_ordered || 0),
+            delivered: Number(m.request_item?.quantity_delivered || 0),
+            quantity: '',
+          }))
+      )
       setConsumptions(
         data.map((m: any) => ({
           request_item_id: m.request_item_id,
@@ -73,6 +96,12 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
     }
   }
 
+  const updateDeliveryRow = (i: number, value: string) => {
+    const updated = [...deliveryRows]
+    updated[i] = { ...updated[i], quantity: value }
+    setDeliveryRows(updated)
+  }
+
   const updateConsumption = (i: number, value: string) => {
     const updated = [...consumptions]
     updated[i] = { ...updated[i], quantity: value }
@@ -88,11 +117,32 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
   const handleSave = async () => {
     if (!stage) return
 
-    // Валидация: нельзя списать больше доступного
+    // Валидация поставок: нельзя поставить больше заказанного
+    for (const d of deliveryRows) {
+      const qty = parseFloat(d.quantity || '0')
+      if (qty > 0) {
+        const remaining = d.ordered - d.delivered
+        if (qty > remaining) {
+          alert(`${d.name}: нельзя поставить ${qty} ${d.unit}, осталось поставить: ${remaining}. Создайте новую заявку для большего объёма.`)
+          return
+        }
+      }
+    }
+
+    // Рассчитаем доступное с учётом новых поставок
+    const deliveredExtra = new Map<string, number>()
+    for (const d of deliveryRows) {
+      const qty = parseFloat(d.quantity || '0')
+      if (qty > 0) deliveredExtra.set(d.request_item_id, qty)
+    }
+
+    // Валидация: нельзя списать больше доступного (с учётом новых поставок)
     for (const c of consumptions) {
       const qty = parseFloat(c.quantity || '0')
-      if (qty > c.available) {
-        alert(`${c.name}: нельзя использовать ${qty} ${c.unit}, доступно только ${c.available}. Выберите дополнительную заявку с остатками или укажите в описании, откуда дополнительные материалы.`)
+      const extra = deliveredExtra.get(c.request_item_id) || 0
+      const totalAvailable = c.available + extra
+      if (qty > totalAvailable) {
+        alert(`${c.name}: нельзя использовать ${qty} ${c.unit}, доступно: ${totalAvailable} (${c.available} + ${extra} новая поставка).`)
         return
       }
     }
@@ -127,6 +177,48 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
           file_path: path,
           file_size: file.size,
           mime_type: file.type,
+        })
+      }
+    }
+
+    // Фиксация поставок
+    const validDeliveries = deliveryRows.filter((d) => d.quantity && parseFloat(d.quantity) > 0)
+    for (const d of validDeliveries) {
+      const qty = parseFloat(d.quantity)
+
+      const { data: delivery } = await supabase
+        .from('deliveries')
+        .insert({
+          request_item_id: d.request_item_id,
+          quantity: qty,
+          description: `Поставка из этапа монтажа: ${stage.title}`,
+        })
+        .select()
+        .single()
+
+      const newDelivered = d.delivered + qty
+      const currentItem = consumptions.find((c) => c.request_item_id === d.request_item_id)
+      const currentAvail = (currentItem?.available || 0) + qty
+      await supabase.from('request_items').update({
+        quantity_delivered: newDelivered,
+        quantity_available: currentAvail,
+      }).eq('id', d.request_item_id)
+
+      await supabase.from('site_stock').upsert({
+        request_item_id: d.request_item_id,
+        quantity_available: currentAvail,
+      }, { onConflict: 'request_item_id' })
+
+      // Обновить available в consumptions для корректного списания
+      if (currentItem) currentItem.available = currentAvail
+
+      if (delivery) {
+        await supabase.from('process_history').insert({
+          event_type: 'delivery',
+          reference_id: delivery.id,
+          reference_table: 'deliveries',
+          title: `Поставка: ${d.name}`,
+          description: `Количество: ${qty} ${d.unit}`,
         })
       }
     }
@@ -258,6 +350,36 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
         </div>
 
         <FileUpload files={files} onChange={setFiles} label="Прикрепить фото/документы" />
+
+        {/* Фиксация поставок */}
+        {deliveryRows.length > 0 && (
+          <div>
+            <h4 className="text-sm font-semibold text-orange-800 mb-2">Поставки материалов</h4>
+            <div className="space-y-2">
+              {deliveryRows.map((d, i) => {
+                const remaining = d.ordered - d.delivered
+                return (
+                  <div key={i} className="flex items-center gap-3 p-2 bg-orange-50 rounded-lg">
+                    <span className="flex-1 text-sm text-gray-700">
+                      {d.name} <span className="text-gray-400">(осталось: {remaining} {d.unit})</span>
+                    </span>
+                    <input
+                      type="number"
+                      value={d.quantity}
+                      onChange={(e) => updateDeliveryRow(i, e.target.value)}
+                      placeholder="Поступило"
+                      min="0"
+                      max={remaining}
+                      step="0.001"
+                      className="w-28 px-3 py-1.5 border border-orange-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    <span className="text-xs text-gray-500 w-8">{d.unit}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Списание материалов */}
         {consumptions.length > 0 && (

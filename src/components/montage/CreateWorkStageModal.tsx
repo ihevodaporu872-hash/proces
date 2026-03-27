@@ -32,17 +32,16 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
     const { data } = await supabase
       .from('request_items')
       .select('*, material_requests!inner(title)')
-      .gt('quantity_available', 0)
 
     if (data) {
       const mapped = data.map((it: any) => ({
         ...it,
         request_title: it.material_requests?.title || '',
       }))
-      // Новые материалы: ещё не использовались
+      // Новые материалы: ещё не использовались (включая непоступившие)
       setAvailableItems(mapped.filter((it: any) => Number(it.quantity_used) === 0))
       // Остатки: частично использованные, но ещё есть доступное кол-во
-      setLeftoverItems(mapped.filter((it: any) => Number(it.quantity_used) > 0))
+      setLeftoverItems(mapped.filter((it: any) => Number(it.quantity_used) > 0 && Number(it.quantity_available) > 0))
     }
   }
 
@@ -59,6 +58,10 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
   const handleSave = async () => {
     if (!title.trim()) return
     const validMaterials = materials.filter((m) => m.request_item_id && m.quantity_planned)
+    if (validMaterials.length === 0) {
+      alert('Укажите хотя бы один материал и необходимое количество')
+      return
+    }
     setSaving(true)
 
     const { data: stage, error } = await supabase
@@ -146,11 +149,21 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     <option value="">Выберите материал...</option>
-                    {availableItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} ({item.request_title}) — доступно: {item.quantity_available} {item.unit}
-                      </option>
-                    ))}
+                    {availableItems.map((item) => {
+                      const avail = Number(item.quantity_available)
+                      const delivered = Number(item.quantity_delivered)
+                      const ordered = Number(item.quantity_ordered)
+                      const statusText = avail > 0
+                        ? `доступно: ${avail} ${item.unit}`
+                        : delivered > 0
+                          ? `поставлено: ${delivered}/${ordered} ${item.unit}`
+                          : `ожидает поставки: ${ordered} ${item.unit}`
+                      return (
+                        <option key={item.id} value={item.id}>
+                          {item.name} ({item.request_title}) — {statusText}
+                        </option>
+                      )
+                    })}
                   </select>
                   <input
                     type="number"
