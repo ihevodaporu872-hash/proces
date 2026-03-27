@@ -87,6 +87,16 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
 
   const handleSave = async () => {
     if (!stage) return
+
+    // Валидация: нельзя списать больше доступного
+    for (const c of consumptions) {
+      const qty = parseFloat(c.quantity || '0')
+      if (qty > c.available) {
+        alert(`${c.name}: нельзя использовать ${qty} ${c.unit}, доступно только ${c.available}. Выберите дополнительную заявку с остатками или укажите в описании, откуда дополнительные материалы.`)
+        return
+      }
+    }
+
     setSaving(true)
 
     // Создаём запись о выполненных работах
