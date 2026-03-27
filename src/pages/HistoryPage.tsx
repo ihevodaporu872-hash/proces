@@ -1,30 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Search, FileText, Clock, Package, Truck, Wrench, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getFileUrl } from '@/lib/fileStorage'
-import type { ProcessHistoryEntry } from '@/types'
-
-const eventIcons: Record<string, typeof Package> = {
-  request_created: Package,
-  delivery: Truck,
-  work_created: Wrench,
-  work_started: Wrench,
-  work_recorded: CheckCircle,
-  work_completed: CheckCircle,
-  leftover_usable: Package,
-  leftover_unusable: Trash2,
-}
-
-const eventColors: Record<string, string> = {
-  request_created: 'bg-purple-100 text-purple-600',
-  delivery: 'bg-orange-100 text-orange-600',
-  work_created: 'bg-gray-100 text-gray-600',
-  work_started: 'bg-blue-100 text-blue-600',
-  work_recorded: 'bg-green-100 text-green-600',
-  work_completed: 'bg-emerald-100 text-emerald-600',
-  leftover_usable: 'bg-teal-100 text-teal-600',
-  leftover_unusable: 'bg-red-100 text-red-600',
-}
+import ProgressCell from '@/components/shared/ProgressCell'
+import type { ProcessHistoryEntry, MaterialRequest, WorkStage } from '@/types'
 
 const eventLabels: Record<string, string> = {
   request_created: 'Заявка создана',
@@ -37,8 +15,15 @@ const eventLabels: Record<string, string> = {
   leftover_unusable: 'Утиль',
 }
 
+interface HistoryRow {
+  entry: ProcessHistoryEntry
+  totalOrdered: number
+  totalDelivered: number
+  totalUsed: number
+}
+
 export default function HistoryPage() {
-  const [entries, setEntries] = useState<ProcessHistoryEntry[]>([])
+  const [rows, setRows] = useState<HistoryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('')
@@ -47,47 +32,127 @@ export default function HistoryPage() {
 
   const loadHistory = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('process_history')
-      .select('*, process_history_files(*)')
-      .order('created_at', { ascending: false })
-      .limit(200)
-    setEntries(data || [])
+
+    const [histRes, reqRes, stageRes] = await Promise.all([
+      supabase
+        .from('process_history')
+        .select('*, process_history_files(*)')
+        .order('created_at', { ascending: false })
+        .limit(200),
+      supabase
+        .from('material_requests')
+        .select('*, request_items(*)'),
+      supabase
+        .from('work_stages')
+        .select('*, work_stage_materials(*, request_item:request_items(*))'),
+    ])
+
+    const entries: ProcessHistoryEntry[] = histRes.data || []
+    const requests: MaterialRequest[] = reqRes.data || []
+    const stages: WorkStage[] = stageRes.data || []
+
+    const requestMap = new Map(requests.map((r) => [r.id, r]))
+    const stageMap = new Map(stages.map((s) => [s.id, s]))
+
+    // Для delivery — нужно связать delivery.request_item_id → request_item → request
+    const { data: deliveries } = await supabase
+      .from('deliveries')
+      .select('id, request_item_id')
+    const deliveryMap = new Map((deliveries || []).map((d: any) => [d.id, d.request_item_id]))
+
+    // request_item_id → request_id
+    const itemToRequest = new Map<string, string>()
+    for (const req of requests) {
+      for (const item of req.request_items || []) {
+        itemToRequest.set(item.id, req.id)
+      }
+    }
+
+    // work_record → work_stage
+    const { data: workRecords } = await supabase
+      .from('work_records')
+      .select('id, work_stage_id')
+    const recordToStage = new Map((workRecords || []).map((r: any) => [r.id, r.work_stage_id]))
+
+    const result: HistoryRow[] = entries.map((entry) => {
+      let totalOrdered = 0
+      let totalDelivered = 0
+      let totalUsed = 0
+
+      const refId = entry.reference_id
+      const refTable = entry.reference_table
+
+      if (refTable === 'material_requests' && refId) {
+        const req = requestMap.get(refId)
+        if (req?.request_items) {
+          totalOrdered = req.request_items.reduce((s, i) => s + Number(i.quantity_ordered), 0)
+          totalDelivered = req.request_items.reduce((s, i) => s + Number(i.quantity_delivered), 0)
+          totalUsed = req.request_items.reduce((s, i) => s + Number(i.quantity_used), 0)
+        }
+      } else if (refTable === 'deliveries' && refId) {
+        const itemId = deliveryMap.get(refId)
+        if (itemId) {
+          const reqId = itemToRequest.get(itemId)
+          if (reqId) {
+            const req = requestMap.get(reqId)
+            if (req?.request_items) {
+              totalOrdered = req.request_items.reduce((s, i) => s + Number(i.quantity_ordered), 0)
+              totalDelivered = req.request_items.reduce((s, i) => s + Number(i.quantity_delivered), 0)
+              totalUsed = req.request_items.reduce((s, i) => s + Number(i.quantity_used), 0)
+            }
+          }
+        }
+      } else if (refTable === 'work_stages' && refId) {
+        const stage = stageMap.get(refId)
+        if (stage?.work_stage_materials) {
+          totalOrdered = stage.work_stage_materials.reduce((s, m) => s + Number(m.quantity_planned), 0)
+          totalUsed = stage.work_stage_materials.reduce((s, m) => s + Number(m.quantity_used), 0)
+          // delivered = из связанных request_items
+          totalDelivered = stage.work_stage_materials.reduce((s, m) => {
+            return s + Number(m.request_item?.quantity_delivered || 0)
+          }, 0)
+        }
+      } else if (refTable === 'work_records' && refId) {
+        const stageId = recordToStage.get(refId)
+        if (stageId) {
+          const stage = stageMap.get(stageId)
+          if (stage?.work_stage_materials) {
+            totalOrdered = stage.work_stage_materials.reduce((s, m) => s + Number(m.quantity_planned), 0)
+            totalUsed = stage.work_stage_materials.reduce((s, m) => s + Number(m.quantity_used), 0)
+            totalDelivered = stage.work_stage_materials.reduce((s, m) => {
+              return s + Number(m.request_item?.quantity_delivered || 0)
+            }, 0)
+          }
+        }
+      }
+
+      return { entry, totalOrdered, totalDelivered, totalUsed }
+    })
+
+    setRows(result)
     setLoading(false)
   }
 
-  const filtered = entries.filter((e) => {
+  const filtered = rows.filter((r) => {
+    const e = r.entry
     const matchSearch = !search || e.title.toLowerCase().includes(search.toLowerCase()) ||
       (e.description || '').toLowerCase().includes(search.toLowerCase())
     const matchFilter = !filter || e.event_type === filter
     return matchSearch && matchFilter
   })
 
-  const eventTypes = [...new Set(entries.map((e) => e.event_type))]
+  const eventTypes = [...new Set(rows.map((r) => r.entry.event_type))]
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
     return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
   }
 
-  const formatTime = (dateStr: string) => {
-    const d = new Date(dateStr)
-    return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-  }
-
-  // Группировка по дате
-  const grouped = filtered.reduce<Record<string, ProcessHistoryEntry[]>>((acc, entry) => {
-    const date = formatDate(entry.created_at)
-    if (!acc[date]) acc[date] = []
-    acc[date].push(entry)
-    return acc
-  }, {})
-
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">История процесса</h1>
-        <p className="text-sm text-gray-500 mt-1">Хронология всех событий с файлами</p>
+        <p className="text-sm text-gray-500 mt-1">Хронология всех событий</p>
       </div>
 
       <div className="flex gap-3 mb-4">
@@ -120,87 +185,50 @@ export default function HistoryPage() {
           <p className="text-gray-500">Событий пока нет</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {Object.entries(grouped).map(([date, dayEntries]) => (
-            <div key={date}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="h-px bg-gray-200 flex-1" />
-                <span className="text-xs font-medium text-gray-500 shrink-0">{date}</span>
-                <div className="h-px bg-gray-200 flex-1" />
-              </div>
-
-              <div className="space-y-2">
-                {dayEntries.map((entry) => {
-                  const Icon = eventIcons[entry.event_type] || Clock
-                  const colorClass = eventColors[entry.event_type] || 'bg-gray-100 text-gray-600'
-                  const files = entry.process_history_files || []
-
-                  return (
-                    <div
-                      key={entry.id}
-                      className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition-shadow"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-lg shrink-0 ${colorClass}`}>
-                          <Icon size={18} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h3 className="text-sm font-medium text-gray-900">{entry.title}</h3>
-                              {entry.description && (
-                                <p className="text-sm text-gray-500 mt-0.5">{entry.description}</p>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-400 shrink-0 text-right">
-                              <div>{formatTime(entry.created_at)}</div>
-                              <div className="mt-0.5">{eventLabels[entry.event_type] || entry.event_type}</div>
-                            </div>
-                          </div>
-
-                          {/* Файлы */}
-                          {files.length > 0 && (
-                            <div className="mt-3 space-y-1">
-                              <p className="text-xs font-medium text-gray-500">Файлы:</p>
-                              <div className="flex flex-wrap gap-2">
-                                {files.map((f) => {
-                                  const isImage = f.mime_type?.startsWith('image/')
-                                  return (
-                                    <a
-                                      key={f.id}
-                                      href={getFileUrl(f.file_path)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="group"
-                                    >
-                                      {isImage ? (
-                                        <div className="w-20 h-20 rounded-lg overflow-hidden border border-gray-200 group-hover:border-blue-400 transition-colors">
-                                          <img
-                                            src={getFileUrl(f.file_path)}
-                                            alt={f.file_name}
-                                            className="w-full h-full object-cover"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors">
-                                          <FileText size={14} />
-                                          <span className="max-w-[120px] truncate">{f.file_name}</span>
-                                        </div>
-                                      )}
-                                    </a>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Дата</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Событие</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Название</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Всего / Поставлено</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Всего / Использовано</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(({ entry, totalOrdered, totalDelivered, totalUsed }) => (
+                <tr
+                  key={entry.id}
+                  className="border-t border-gray-100 hover:bg-gray-50 transition-colors"
+                >
+                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                    {formatDate(entry.created_at)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                    {eventLabels[entry.event_type] || entry.event_type}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    {entry.title}
+                  </td>
+                  <td className="px-4 py-3">
+                    {totalOrdered > 0 ? (
+                      <ProgressCell current={totalDelivered} total={totalOrdered} label="Поставлено" />
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {totalOrdered > 0 ? (
+                      <ProgressCell current={totalUsed} total={totalOrdered} label="Использовано" />
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
