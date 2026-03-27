@@ -21,6 +21,7 @@ export default function MontagePage() {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [recordStage, setRecordStage] = useState<WorkStage | null>(null)
+  const [completeStageModal, setCompleteStageModal] = useState<WorkStage | null>(null)
   const [detailStage, setDetailStage] = useState<WorkStage | null>(null)
 
   useEffect(() => { loadStages() }, [])
@@ -51,21 +52,6 @@ export default function MontagePage() {
     loadStages()
   }
 
-  const completeStage = async (stage: WorkStage) => {
-    await supabase.from('work_stages').update({
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-    }).eq('id', stage.id)
-
-    await supabase.from('process_history').insert({
-      event_type: 'work_completed',
-      reference_id: stage.id,
-      reference_table: 'work_stages',
-      title: `Завершён этап: ${stage.title}`,
-    })
-
-    loadStages()
-  }
 
   const filtered = stages.filter((s) =>
     s.title.toLowerCase().includes(search.toLowerCase())
@@ -172,7 +158,7 @@ export default function MontagePage() {
                         Фиксация работ
                       </button>
                       <button
-                        onClick={() => completeStage(stage)}
+                        onClick={() => setCompleteStageModal(stage)}
                         className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100"
                       >
                         <CheckCircle size={14} /> Завершить
@@ -198,6 +184,13 @@ export default function MontagePage() {
         onClose={() => setRecordStage(null)}
         stage={recordStage}
         onRecorded={loadStages}
+      />
+      <WorkRecordModal
+        open={!!completeStageModal}
+        onClose={() => setCompleteStageModal(null)}
+        stage={completeStageModal}
+        onRecorded={loadStages}
+        completeAfterSave
       />
       <StageDetailModal
         open={!!detailStage}

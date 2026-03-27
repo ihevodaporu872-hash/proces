@@ -28,9 +28,10 @@ interface Props {
   onClose: () => void
   stage: WorkStage | null
   onRecorded: () => void
+  completeAfterSave?: boolean
 }
 
-export default function WorkRecordModal({ open, onClose, stage, onRecorded }: Props) {
+export default function WorkRecordModal({ open, onClose, stage, onRecorded, completeAfterSave }: Props) {
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [consumptions, setConsumptions] = useState<ConsumptionRow[]>([])
@@ -195,6 +196,10 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded }: Pr
       )
     }
 
+    if (completeAfterSave) {
+      await markCompleted()
+    }
+
     setSaving(false)
     setDescription('')
     setFiles([])
@@ -202,10 +207,34 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded }: Pr
     onClose()
   }
 
+  const markCompleted = async () => {
+    if (!stage) return
+    await supabase.from('work_stages').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+    }).eq('id', stage.id)
+
+    await supabase.from('process_history').insert({
+      event_type: 'work_completed',
+      reference_id: stage.id,
+      reference_table: 'work_stages',
+      title: `Завершён этап: ${stage.title}`,
+    })
+  }
+
+  const handleSkipAndComplete = async () => {
+    if (!stage) return
+    setSaving(true)
+    await markCompleted()
+    setSaving(false)
+    onRecorded()
+    onClose()
+  }
+
   if (!stage) return null
 
   return (
-    <Modal open={open} onClose={onClose} title={`Фиксация работ: ${stage.title}`} wide>
+    <Modal open={open} onClose={onClose} title={completeAfterSave ? `Завершение этапа: ${stage.title}` : `Фиксация работ: ${stage.title}`} wide>
       <div className="space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Описание выполненных работ</label>
@@ -285,17 +314,30 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded }: Pr
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">
-            Отмена
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Сохранение...' : 'Зафиксировать работы'}
-          </button>
+        <div className="flex justify-between pt-2 border-t border-gray-100">
+          <div>
+            {completeAfterSave && (
+              <button
+                onClick={handleSkipAndComplete}
+                disabled={saving}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                {saving ? 'Завершение...' : 'Данные уже указаны — завершить'}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">
+              Отмена
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Сохранение...' : completeAfterSave ? 'Зафиксировать и завершить' : 'Зафиксировать работы'}
+            </button>
+          </div>
         </div>
       </div>
     </Modal>
