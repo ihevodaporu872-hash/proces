@@ -1,19 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Package, ClipboardCheck, FileText, Image, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ClipboardCheck, FileText } from 'lucide-react'
 import Modal from '../shared/Modal'
 import ProgressCell from '../shared/ProgressCell'
 import { supabase } from '@/lib/supabase'
 import { getFileUrl } from '@/lib/fileStorage'
 import type { WorkStage } from '@/types'
-
-interface FileInfo {
-  id: string
-  file_name: string
-  file_path: string
-  mime_type: string | null
-  uploaded_at: string
-  context: string // описание контекста: дата, описание работ, материалы
-}
 
 interface Props {
   open: boolean
@@ -24,17 +15,10 @@ interface Props {
 export default function ProcessDetailModal({ open, onClose, stage }: Props) {
   const [materials, setMaterials] = useState<any[]>([])
   const [history, setHistory] = useState<any[]>([])
-  const [allFiles, setAllFiles] = useState<FileInfo[]>([])
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<'history' | 'gallery'>('history')
-  const [galleryIndex, setGalleryIndex] = useState(0)
 
   useEffect(() => {
-    if (stage && open) {
-      setTab('history')
-      setGalleryIndex(0)
-      loadData()
-    }
+    if (stage && open) loadData()
   }, [stage, open])
 
   const loadData = async () => {
@@ -129,45 +113,8 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
     setMaterials(matsRes.data || [])
     setHistory(timeline)
 
-    // Собираем все файлы для галереи
-    const files: FileInfo[] = []
-    for (const r of records) {
-      const consumptionText = (r.material_consumptions || [])
-        .filter((mc: any) => mc.quantity > 0)
-        .map((mc: any) => `${mc.request_item?.name}: ${mc.quantity} ${mc.request_item?.unit}`)
-        .join(', ')
-
-      for (const f of r.work_record_files || []) {
-        files.push({
-          ...f,
-          context: [
-            new Date(r.recorded_at).toLocaleString('ru-RU'),
-            r.description,
-            consumptionText ? `Использовано: ${consumptionText}` : null,
-          ].filter(Boolean).join(' — '),
-        })
-      }
-    }
-    for (const h of allProcessHistory) {
-      for (const f of h.process_history_files || []) {
-        if (!files.find((ef) => ef.file_path === f.file_path)) {
-          files.push({
-            ...f,
-            context: [
-              new Date(h.created_at).toLocaleString('ru-RU'),
-              h.title,
-              h.description,
-            ].filter(Boolean).join(' — '),
-          })
-        }
-      }
-    }
-
-    setAllFiles(files)
     setLoading(false)
   }
-
-  const imageFiles = allFiles.filter((f) => f.mime_type?.startsWith('image/'))
 
   const formatDateTime = (s: string) => new Date(s).toLocaleString('ru-RU')
 
@@ -186,32 +133,13 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
           {stage.description && <span className="text-sm text-gray-500">{stage.description}</span>}
         </div>
 
-        {/* Табы */}
-        <div className="flex gap-1 border-b border-gray-200">
-          <button
-            onClick={() => setTab('history')}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <ClipboardCheck size={14} className="inline mr-1.5 -mt-0.5" />
-            История
-          </button>
-          <button
-            onClick={() => { setTab('gallery'); setGalleryIndex(0) }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === 'gallery' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Image size={14} className="inline mr-1.5 -mt-0.5" />
-            Фото ({imageFiles.length})
-          </button>
-        </div>
+        <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+          <ClipboardCheck size={16} /> История
+        </h3>
 
         {loading ? (
           <p className="text-sm text-gray-500 py-4">Загрузка...</p>
-        ) : tab === 'history' ? (
-          /* История */
+        ) : (
           <div className="space-y-3 max-h-[50vh] overflow-y-auto">
             {history.length === 0 && (
               <p className="text-sm text-gray-400 py-4 text-center">Событий пока нет</p>
@@ -267,11 +195,7 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
                       return isImage ? (
                         <div
                           key={f.id}
-                          className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 hover:border-blue-400 cursor-pointer transition-colors"
-                          onClick={() => {
-                            const idx = imageFiles.findIndex((img) => img.file_path === f.file_path)
-                            if (idx >= 0) { setGalleryIndex(idx); setTab('gallery') }
-                          }}
+                          className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 transition-colors"
                         >
                           <img src={getFileUrl(f.file_path)} alt={f.file_name} className="w-full h-full object-cover" />
                         </div>
@@ -292,68 +216,6 @@ export default function ProcessDetailModal({ open, onClose, stage }: Props) {
               </div>
             ))}
           </div>
-        ) : (
-          /* Галерея */
-          imageFiles.length === 0 ? (
-            <p className="text-sm text-gray-400 py-8 text-center">Нет прикреплённых изображений</p>
-          ) : (
-            <div>
-              {/* Основное изображение */}
-              <div className="relative bg-gray-100 rounded-lg overflow-hidden" style={{ minHeight: 320 }}>
-                <img
-                  src={getFileUrl(imageFiles[galleryIndex].file_path)}
-                  alt={imageFiles[galleryIndex].file_name}
-                  className="w-full max-h-[50vh] object-contain"
-                />
-
-                {/* Навигация */}
-                {imageFiles.length > 1 && (
-                  <>
-                    <button
-                      onClick={() => setGalleryIndex((i) => (i - 1 + imageFiles.length) % imageFiles.length)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/80 rounded-full shadow hover:bg-white transition-colors"
-                    >
-                      <ChevronLeft size={20} />
-                    </button>
-                    <button
-                      onClick={() => setGalleryIndex((i) => (i + 1) % imageFiles.length)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/80 rounded-full shadow hover:bg-white transition-colors"
-                    >
-                      <ChevronRight size={20} />
-                    </button>
-                  </>
-                )}
-
-                {/* Счётчик */}
-                <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 text-white text-xs rounded">
-                  {galleryIndex + 1} / {imageFiles.length}
-                </div>
-              </div>
-
-              {/* Информация о файле */}
-              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm font-medium text-gray-900">{imageFiles[galleryIndex].file_name}</p>
-                <p className="text-xs text-gray-500 mt-1">{imageFiles[galleryIndex].context}</p>
-              </div>
-
-              {/* Превью */}
-              {imageFiles.length > 1 && (
-                <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
-                  {imageFiles.map((f, i) => (
-                    <div
-                      key={f.id}
-                      onClick={() => setGalleryIndex(i)}
-                      className={`w-14 h-14 rounded-lg overflow-hidden shrink-0 cursor-pointer border-2 transition-colors ${
-                        i === galleryIndex ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
-                      }`}
-                    >
-                      <img src={getFileUrl(f.file_path)} alt={f.file_name} className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
         )}
       </div>
     </Modal>

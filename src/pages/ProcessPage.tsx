@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Camera } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import ProgressCell from '@/components/shared/ProgressCell'
 import ProcessDetailModal from '@/components/process/ProcessDetailModal'
+import PhotoGalleryModal from '@/components/process/PhotoGalleryModal'
 import type { WorkStage } from '@/types'
 
 interface StageRow {
@@ -17,6 +18,7 @@ export default function ProcessPage() {
   const [rows, setRows] = useState<StageRow[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStage, setSelectedStage] = useState<WorkStage | null>(null)
+  const [photoStage, setPhotoStage] = useState<WorkStage | null>(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -87,6 +89,7 @@ export default function ProcessPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Конструкция</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Прогресс</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Последняя фиксация</th>
+                <th className="px-4 py-3 font-medium text-gray-600">Фото</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -116,6 +119,14 @@ export default function ProcessPage() {
                     }
                   </td>
                   <td className="px-4 py-3">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setPhotoStage(stage) }}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    >
+                      <Camera size={16} />
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
                     <ChevronRight size={16} className="text-gray-400" />
                   </td>
                 </tr>
@@ -129,6 +140,11 @@ export default function ProcessPage() {
         open={!!selectedStage}
         onClose={() => setSelectedStage(null)}
         stage={selectedStage}
+      />
+      <PhotoGalleryModal
+        open={!!photoStage}
+        onClose={() => setPhotoStage(null)}
+        stage={photoStage}
       />
     </div>
   )
