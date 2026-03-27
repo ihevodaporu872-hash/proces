@@ -167,9 +167,12 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
 
     // Загружаем файлы
     const uploadedFiles = []
+    const uploadErrors: string[] = []
     for (const file of files) {
       const { path, error: uploadErr } = await uploadFile(file, `work_records/${record.id}`)
-      if (!uploadErr) {
+      if (uploadErr) {
+        uploadErrors.push(`${file.name}: ${uploadErr}`)
+      } else {
         uploadedFiles.push({ file_name: file.name, file_path: path, file_size: file.size, mime_type: file.type })
         await supabase.from('work_record_files').insert({
           work_record_id: record.id,
@@ -179,6 +182,9 @@ export default function WorkRecordModal({ open, onClose, stage, onRecorded, comp
           mime_type: file.type,
         })
       }
+    }
+    if (uploadErrors.length > 0) {
+      alert('Ошибка загрузки фото:\n' + uploadErrors.join('\n') + '\n\nУбедитесь, что бакет "process-files" создан в Supabase Storage и настроен на публичный доступ.')
     }
 
     // Фиксация поставок

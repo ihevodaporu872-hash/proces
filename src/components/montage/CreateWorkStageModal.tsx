@@ -98,9 +98,12 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
     }).select().single()
 
     if (photos.length > 0 && histEntry) {
+      const uploadErrors: string[] = []
       for (const file of photos) {
         const { path, error: uploadErr } = await uploadFile(file, `work_stages/${stage.id}`)
-        if (!uploadErr && path) {
+        if (uploadErr) {
+          uploadErrors.push(`${file.name}: ${uploadErr}`)
+        } else if (path) {
           await supabase.from('process_history_files').insert({
             history_id: histEntry.id,
             file_name: file.name,
@@ -109,6 +112,9 @@ export default function CreateWorkStageModal({ open, onClose, onCreated }: Props
             mime_type: file.type,
           })
         }
+      }
+      if (uploadErrors.length > 0) {
+        alert('Ошибка загрузки фото:\n' + uploadErrors.join('\n') + '\n\nУбедитесь, что бакет "process-files" создан в Supabase Storage и настроен на публичный доступ.')
       }
     }
 

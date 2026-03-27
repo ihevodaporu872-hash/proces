@@ -95,9 +95,12 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated, 
     }
 
     // Загрузка файлов
+    const uploadErrors: string[] = []
     for (const file of deliveryFiles) {
       const { path, error: uploadErr } = await uploadFile(file, `deliveries/${delivery.id}`)
-      if (!uploadErr) {
+      if (uploadErr) {
+        uploadErrors.push(`${file.name}: ${uploadErr}`)
+      } else {
         await supabase.from('delivery_files').insert({
           delivery_id: delivery.id,
           file_name: file.name,
@@ -106,6 +109,9 @@ export default function RequestDetailModal({ open, onClose, request, onUpdated, 
           mime_type: file.type,
         })
       }
+    }
+    if (uploadErrors.length > 0) {
+      alert('Ошибка загрузки файлов:\n' + uploadErrors.join('\n') + '\n\nУбедитесь, что бакет "process-files" создан в Supabase Storage.')
     }
 
     // Обновить количество поставки в позиции
